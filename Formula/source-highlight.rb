@@ -30,7 +30,10 @@ class SourceHighlight < Formula
     ENV["CC"] = "#{llvm.opt_bin}/clang"
     ENV["CXX"] = "#{llvm.opt_bin}/clang++"
     ENV["LDFLAGS"] = "-L#{llvm.opt_lib}/c++ -Wl,-rpath,#{llvm.opt_lib}/c++"
-    ENV["CXXFLAGS"] = "-stdlib=libc++"
+    # source-highlight uses deprecated C++ features removed in C++17:
+    # - dynamic exception specifications (throw(...))
+    # - register storage class
+    ENV["CXXFLAGS"] = "-stdlib=libc++ -Wno-dynamic-exception-spec -Wno-register -Wno-deprecated-register"
 
     system "./configure", "--disable-dependency-tracking",
                           "--prefix=#{prefix}",
