@@ -8,6 +8,14 @@ Custom Homebrew tap containing patched formulae for macOS 10.15 (Catalina) compa
 
 ## Formula Development
 
+### Checking for Upstream Updates
+
+```bash
+./scripts/check-upstream
+```
+
+Compares tap formulae versions against homebrew-core. Returns exit code 1 if any are outdated.
+
 ### Testing Formulae Locally
 
 ```bash
