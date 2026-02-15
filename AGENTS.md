@@ -45,6 +45,11 @@ Formulae are based on upstream homebrew-core but modified for 10.15 compatibilit
 - **Fix**: Explicitly adds json-c to dependencies with proper CPPFLAGS/LDFLAGS
 - **Key dependency**: `json-c`
 
+### source-highlight.rb
+- **Problem**: Links against both boost (LLVM libc++) and system libc++, causing ABI mismatch
+- **Fix**: Build with LLVM toolchain to match boost's libc++ linkage
+- **Key dependency**: `llvm`
+
 ## CI/CD
 
 - `tests.yml`: Runs `brew test-bot` on PRs (ubuntu-22.04, macos-15-intel, macos-26)
