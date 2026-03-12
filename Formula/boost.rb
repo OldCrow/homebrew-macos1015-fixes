@@ -45,9 +45,9 @@ class Boost < Formula
     # Force boost to compile with the desired compiler
     open("user-config.jam", "a") do |file|
       if OS.mac?
-        file.write "using darwin : : #{ENV.cxx} ;\\n"
+        file.write "using darwin : : #{ENV.cxx} ;\n"
       else
-        file.write "using gcc : : #{ENV.cxx} ;\\n"
+        file.write "using gcc : : #{ENV.cxx} ;\n"
       end
     end
 
