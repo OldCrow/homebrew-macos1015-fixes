@@ -60,12 +60,27 @@ Formulae are based on upstream homebrew-core but modified for 10.15 compatibilit
 
 ### protobuf.rb
 - **Problem**: `PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED` expands via `ABSL_ATTRIBUTE_WARN_UNUSED` to `[[gnu::warn_unused]]`; Apple Clang 12.x misparses this combined with `__attribute__((visibility(...)))` on class declarations, treating `GzipInputStream`/`GzipOutputStream` as anonymous and cascading to 20 build failures in `gzip_stream.cc`
-- **Fix**: Build with Homebrew LLVM (`ENV.llvm_clang`); tests disabled due to ABI mismatch between abseil (Apple Clang) and LLVM-compiled test code (`absl::Cord` template instantiation missing from dylib)
+- **Fix**: Build with Homebrew LLVM (`ENV.llvm_clang`); tests enabled (googletest build dep, ctest step)
+- **Key dependency**: `llvm` (build), `googletest` (build)
+
+### protobuf@33.rb
+- **Problem**: Same `[[gnu::warn_unused]]` Apple Clang 12.x parse failure as protobuf.rb
+- **Fix**: Build with Homebrew LLVM (`ENV.llvm_clang`); tests disabled (Apple Clang/LLVM mangling mismatch for `enable_if` NTTPs means `absl::Cord::Cord<string,0>` symbol cannot be resolved regardless of compiler used for tests)
 - **Key dependency**: `llvm` (build)
 
 ### abseil.rb
-- **Problem**: Apple Clang 12.x lacks support for `[[gnu::warn_unused]]` as a class attribute; also causes ABI mismatch with LLVM-compiled consumers (missing template instantiations in shared dylib)
-- **Fix**: Build with Homebrew LLVM (`ENV.llvm_clang`); enables protobuf tests to be re-enabled in future
+- **Problem**: Apple Clang 12.x lacks support for `[[gnu::warn_unused]]` as a class attribute; also encodes `enable_if` non-type template parameters (NTTPs) with different C++ name mangling than LLVM 22 (`Li0E` vs `Tn`-encoded form), causing missing symbols when LLVM-compiled consumers link against Apple-Clang-compiled abseil
+- **Fix**: Build with Homebrew LLVM (`ENV.llvm_clang`) so `extern template` instantiations like `Cord::Cord<string,0>` export with LLVM's NTTP mangling, matching all LLVM-compiled consumers
+- **Key dependency**: `llvm` (build)
+
+### grpc.rb
+- **Problem**: Links against abseil; Apple Clang 12.x produces different NTTP mangling for `absl::Cord::Cord<string,0>` than our LLVM-compiled abseil exports, causing undefined symbol at link time. Also, `grpc_cli` sub-build fails because Google Benchmark's regex detection doesn't work under LLVM on macOS 10.15
+- **Fix**: Build with Homebrew LLVM (`ENV.llvm_clang`); `grpc_cli` dropped (upstream removes it at 1.80.0)
+- **Key dependency**: `llvm` (build)
+
+### re2.rb
+- **Problem**: No build failure, but re2 links against abseil and should use the same compiler for full ABI consistency across the abseil dependency chain
+- **Fix**: Build with Homebrew LLVM (`ENV.llvm_clang`)
 - **Key dependency**: `llvm` (build)
 
 ## LLVM Build Pattern
