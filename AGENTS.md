@@ -58,6 +58,37 @@ Formulae are based on upstream homebrew-core but modified for 10.15 compatibilit
 - **Fix**: Build with LLVM toolchain to match boost's libc++ linkage
 - **Key dependency**: `llvm`
 
+### protobuf.rb
+- **Problem**: `PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED` expands via `ABSL_ATTRIBUTE_WARN_UNUSED` to `[[gnu::warn_unused]]`; Apple Clang 12.x misparses this combined with `__attribute__((visibility(...)))` on class declarations, treating `GzipInputStream`/`GzipOutputStream` as anonymous and cascading to 20 build failures in `gzip_stream.cc`
+- **Fix**: Build with Homebrew LLVM (`ENV.llvm_clang`); tests disabled due to ABI mismatch between abseil (Apple Clang) and LLVM-compiled test code (`absl::Cord` template instantiation missing from dylib)
+- **Key dependency**: `llvm` (build)
+
+### abseil.rb
+- **Problem**: Apple Clang 12.x lacks support for `[[gnu::warn_unused]]` as a class attribute; also causes ABI mismatch with LLVM-compiled consumers (missing template instantiations in shared dylib)
+- **Fix**: Build with Homebrew LLVM (`ENV.llvm_clang`); enables protobuf tests to be re-enabled in future
+- **Key dependency**: `llvm` (build)
+
+## LLVM Build Pattern
+
+The standard fix for Apple Clang 12.x incompatibilities is to build with Homebrew LLVM:
+
+```ruby
+on_macos do
+  depends_on "llvm" => :build
+end
+
+def install
+  ENV.llvm_clang if OS.mac?
+  # ...
+end
+```
+
+`ENV.llvm_clang` is Homebrew's built-in method — it sets `CC`/`CXX` to the `llvm` formula's clang within the sandboxed build environment. This is the **only reliable way** to use LLVM for Homebrew builds; Homebrew ignores user-level `CC`/`CXX`/`LDFLAGS` exports from the shell environment.
+
+### Legacy: `brew-llvm` alias
+
+The shell has a `brew-llvm` alias and `~/.homebrew-llvm-wrappers/` that prepend LLVM to PATH before invoking brew. This predates the tap formula approach and is **unreliable** — Homebrew's superenv shim layer intercepts compiler calls regardless of PATH. Do not use it for new formulas. If a formula needs LLVM, add it to this tap with `ENV.llvm_clang`. The alias can serve as a last-resort fallback for one-off installs from homebrew-core where adding a tap formula is not warranted.
+
 ## CI/CD
 
 - `tests.yml`: Runs `brew test-bot` on PRs (ubuntu-22.04, macos-15-intel, macos-26)
