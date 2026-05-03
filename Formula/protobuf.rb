@@ -21,8 +21,8 @@ class Protobuf < Formula
     # __attribute__((visibility(...))) causes the compiler to treat GzipInputStream
     # and GzipOutputStream as anonymous classes, cascading to 20 build failures
     # in gzip_stream.cc. Use Homebrew LLVM to avoid this.
-    depends_on "llvm" => :build
     depends_on "googletest" => :build
+    depends_on "llvm" => :build
   end
 
   on_linux do

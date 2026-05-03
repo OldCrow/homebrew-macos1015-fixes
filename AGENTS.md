@@ -73,6 +73,11 @@ Formulae are based on upstream homebrew-core but modified for 10.15 compatibilit
 - **Fix**: Build with Homebrew LLVM (`ENV.llvm_clang`) so `extern template` instantiations like `Cord::Cord<string,0>` export with LLVM's NTTP mangling, matching all LLVM-compiled consumers
 - **Key dependency**: `llvm` (build)
 
+### git.rb
+- **Problem**: (1) git 2.53.0 had a broken `contrib/credential/osxkeychain/Makefile` that referenced the top-level Makefile incorrectly (fixed in 2.54.0 upstream). (2) Upstream removed `libiconv` from the macOS dependency list (homebrew-core/pull/258461); on macOS 10.15 the system `libiconv` is too old, so the Homebrew dep and `ICONVDIR` must be set explicitly. (3) `contrib/credential/netrc`'s test harness sources `t/test-lib.sh`, which requires sandbox infrastructure unavailable in the Homebrew build environment on macOS 10.15.
+- **Fix**: Version pinned to 2.54.0 (osxkeychain issue resolved upstream). `libiconv` kept as an `on_macos` dep alongside `gettext`; `ENV["ICONVDIR"]` set in install. `make build` used instead of `make test` for the netrc helper.
+- **Key dependency**: `libiconv` (runtime, macOS only)
+
 ### grpc.rb
 - **Problem**: Links against abseil; Apple Clang 12.x produces different NTTP mangling for `absl::Cord::Cord<string,0>` than our LLVM-compiled abseil exports, causing undefined symbol at link time. Also, `grpc_cli` sub-build fails because Google Benchmark's regex detection doesn't work under LLVM on macOS 10.15
 - **Fix**: Build with Homebrew LLVM (`ENV.llvm_clang`); `grpc_cli` dropped (upstream removes it at 1.80.0)

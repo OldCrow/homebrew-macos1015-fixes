@@ -20,7 +20,6 @@ class Abseil < Formula
 
   def install
     ENV.llvm_clang if OS.mac?
-    ENV.runtime_cpu_detection
 
     # Install test helpers.
     extra_cmake_args = %w[ABSL_BUILD_TEST_HELPERS ABSL_USE_EXTERNAL_GOOGLETEST ABSL_FIND_GOOGLETEST].map do |arg|
