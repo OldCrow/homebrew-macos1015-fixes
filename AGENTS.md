@@ -93,10 +93,18 @@ Formulae are based on upstream homebrew-core but modified for 10.15 compatibilit
 - **Fix**: Build with Homebrew LLVM (`ENV.llvm_clang`)
 - **Key dependency**: `llvm` (build)
 
-### openjdk.rb
-- **Problem**: `memMapPrinter_macosx.cpp` references `VM_MEMORY_MALLOC_PROB_GUARD` in a switch-case via the `X1()` macro. This constant was added to `<mach/vm_statistics.h>` after macOS 10.15; the 10.15 SDK tops out at `VM_MEMORY_MALLOC_MEDIUM` (12). The result is a hard compile error: `use of undeclared identifier 'VM_MEMORY_MALLOC_PROB_GUARD'`.
-- **Fix**: Source-only patch wrapping the `X1(MALLOC_PROB_GUARD, ...)` call with `#ifdef VM_MEMORY_MALLOC_PROB_GUARD` / `#endif`. On 10.15 the tag is simply unreachable; the existing `default:` branch already formats unknown tag values as hex.
-- **Key dependency**: none (source-only patch)
+### openjdk@21.rb
+- **Problem**: Two build failures under the 10.15 SDK:
+  1. `CGraphicsDevice.m` uses `NSBundleExecutableArchitectureARM64`, added in the macOS 11.0 SDK for Apple Silicon. The 10.15 SDK does not define it, producing a hard compile error even though the usage is guarded by `@available(macOS 11, *)` (a runtime guard, not a compile-time one).
+  2. The boot JDK's `libawt.dylib` hard-links against `JavaRuntimeSupport.framework`. On this machine the framework is nested inside `JavaVM.framework` rather than at the top-level path dyld expects, causing `DTDBuilder` (a Java build tool that loads AWT) to fail with `UnsatisfiedLinkError`.
+- **Fix**: Source-only patch adding `#ifndef NSBundleExecutableArchitectureARM64` / `#define` / `#endif` before the first use in `CGraphicsDevice.m`. `DYLD_FRAMEWORK_PATH` is extended in `install` to include `JavaVM.framework/Versions/A/Frameworks` so dyld resolves the framework at its actual location.
+- **Key dependency**: none (source-only patch + env var)
+- **Note**: JDK 25 (`openjdk.rb`) was attempted first but abandoned — it had three separate 10.15 issues (`VM_MEMORY_MALLOC_PROB_GUARD`, `-Wl,-reproducible`, plus the same DTDBuilder/`JavaRuntimeSupport` path issue). JDK 21 needed only the two fixes above.
+
+### pmd.rb
+- **Problem**: The upstream `pmd.rb` formula depends on `openjdk` (currently JDK 25), which cannot be built on macOS 10.15. PMD 7.x requires only Java 8+.
+- **Fix**: Depend on `wolfman/macos1015-fixes/openjdk@21` instead. No other changes from upstream.
+- **Key dependency**: `wolfman/macos1015-fixes/openjdk@21`
 
 ## LLVM Build Pattern
 

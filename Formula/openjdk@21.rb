@@ -1,17 +1,17 @@
-class Openjdk < Formula
+class OpenjdkAT21 < Formula
   desc "Development kit for the Java programming language"
   homepage "https://openjdk.org/"
-  url "https://github.com/openjdk/jdk25u/archive/refs/tags/jdk-25.0.2-ga.tar.gz"
-  sha256 "e4b935e999a28ee732dfb932dcef4a8591b42f6fcd182099319db68e9d8017ff"
+  url "https://github.com/openjdk/jdk21u/archive/refs/tags/jdk-21.0.11-ga.tar.gz"
+  sha256 "76b8310966649ea8a6340f92d4f19f6f84e3083b682a514c8f1999c93373385f"
   license "GPL-2.0-only" => { with: "Classpath-exception-2.0" }
   compatibility_version 1
 
   livecheck do
     url :stable
-    regex(/^jdk[._-]v?(\d+(?:\.\d+)*)-ga$/i)
+    regex(/^jdk[._-]v?(21(?:\.\d+)*)-ga$/i)
   end
 
-  keg_only :shadowed_by_macos
+  keg_only :versioned_formula
 
   depends_on "autoconf" => :build
   depends_on "pkgconf" => :build
@@ -44,41 +44,49 @@ class Openjdk < Formula
   resource "boot-jdk" do
     on_macos do
       on_arm do
-        url "https://download.java.net/java/GA/jdk25.0.1/2fbf10d8c78e40bd87641c434705079d/8/GPL/openjdk-25.0.1_macos-aarch64_bin.tar.gz"
-        sha256 "9175d602f3be2ffa241eb01d24ba4541e29a4dfa2095d4bdc1c9eb4bf4d56705"
+        url "https://download.java.net/java/GA/jdk21.0.2/f2283984656d49d69e91c558476027ac/13/GPL/openjdk-21.0.2_macos-aarch64_bin.tar.gz"
+        sha256 "b3d588e16ec1e0ef9805d8a696591bd518a5cea62567da8f53b5ce32d11d22e4"
       end
       on_intel do
-        url "https://download.java.net/java/GA/jdk25.0.1/2fbf10d8c78e40bd87641c434705079d/8/GPL/openjdk-25.0.1_macos-x64_bin.tar.gz"
-        sha256 "906fec42291d1f01b4cbd419eece8ff8872dbde1e74bb22e6a98ee0322a22bcb"
+        url "https://download.java.net/java/GA/jdk21.0.2/f2283984656d49d69e91c558476027ac/13/GPL/openjdk-21.0.2_macos-x64_bin.tar.gz"
+        sha256 "8fd09e15dc406387a0aba70bf5d99692874e999bf9cd9208b452b5d76ac922d3"
       end
     end
     on_linux do
       on_arm do
-        url "https://download.java.net/java/GA/jdk25.0.1/2fbf10d8c78e40bd87641c434705079d/8/GPL/openjdk-25.0.1_linux-aarch64_bin.tar.gz"
-        sha256 "c5732ae191151195fbd2cfb7aef7675bf2c37cfa8bfd06f8330b6f04d4eb03a4"
+        url "https://download.java.net/java/GA/jdk21.0.2/f2283984656d49d69e91c558476027ac/13/GPL/openjdk-21.0.2_linux-aarch64_bin.tar.gz"
+        sha256 "08db1392a48d4eb5ea5315cf8f18b89dbaf36cda663ba882cf03c704c9257ec2"
       end
       on_intel do
-        url "https://download.java.net/java/GA/jdk25.0.1/2fbf10d8c78e40bd87641c434705079d/8/GPL/openjdk-25.0.1_linux-x64_bin.tar.gz"
-        sha256 "514db33011f2c81fa9c589f7712735b42b9d2575db8f817d3be40a92d2ef7ad8"
+        url "https://download.java.net/java/GA/jdk21.0.2/f2283984656d49d69e91c558476027ac/13/GPL/openjdk-21.0.2_linux-x64_bin.tar.gz"
+        sha256 "a2def047a73941e01a73739f92755f86b895811afb1f91243db214cff5bdac3f"
       end
     end
   end
 
-  # VM_MEMORY_MALLOC_PROB_GUARD was added to <mach/vm_statistics.h> after
-  # macOS 10.15. The 10.15 SDK tops out at VM_MEMORY_MALLOC_MEDIUM (12), so
-  # the switch-case in memMapPrinter_macosx.cpp fails to compile.
-  # Guard the X1() call with #ifdef so it is silently omitted on 10.15 —
-  # the default case already handles unknown tag values gracefully.
+  # CGraphicsDevice.m uses NSBundleExecutableArchitectureARM64, which was added
+  # in the macOS 11.0 SDK for Apple Silicon. The 10.15 SDK does not define it,
+  # causing a compile error even though the usage is guarded by @available(macOS 11, *).
+  # Define the constant for older SDKs; the @available guard prevents runtime use.
   patch :DATA
 
   def install
+    tap_url = "https://github.com/OldCrow/homebrew-macos1015-fixes"
+    tap_issues_url = "#{tap_url}/issues"
+
     boot_jdk = buildpath/"boot-jdk"
     resource("boot-jdk").stage boot_jdk
     boot_jdk /= "Contents/Home" if OS.mac?
     java_options = ENV.delete("_JAVA_OPTIONS")
 
-    tap_url = "https://github.com/OldCrow/homebrew-macos1015-fixes"
-    tap_issues_url = "#{tap_url}/issues"
+    # On macOS 10.15, JavaRuntimeSupport.framework lives inside JavaVM.framework
+    # rather than at the top-level /System/Library/Frameworks path that the boot
+    # JDK's libawt.dylib expects. Extending DYLD_FRAMEWORK_PATH lets dyld find it
+    # so the DTDBuilder build tool (which loads AWT) can run successfully.
+    if OS.mac?
+      jrs_parent = "/System/Library/Frameworks/JavaVM.framework/Versions/A/Frameworks"
+      ENV["DYLD_FRAMEWORK_PATH"] = [jrs_parent, ENV["DYLD_FRAMEWORK_PATH"]].compact.join(":")
+    end
 
     args = %W[
       --disable-warnings-as-errors
@@ -104,10 +112,7 @@ class Openjdk < Formula
       --with-zlib=system
     ]
 
-    ldflags = %W[
-      -Wl,-rpath,#{loader_path.gsub("$", "\\$$")}
-      -Wl,-rpath,#{loader_path.gsub("$", "\\$$")}/server
-    ]
+    ldflags = ["-Wl,-rpath,#{loader_path.gsub("$", "\\$$")}/server"]
     args += if OS.mac?
       ldflags << "-headerpad_max_install_names"
 
@@ -130,7 +135,6 @@ class Openjdk < Formula
     end
     args << "--with-extra-ldflags=#{ldflags.join(" ")}"
 
-    # Workaround for Xcode 16 bug: https://bugs.openjdk.org/browse/JDK-8340341.
     if DevelopmentTools.clang_build_version == 1600
       args << "--with-extra-cflags=-mllvm -enable-constraint-elimination=0"
     end
@@ -158,7 +162,7 @@ class Openjdk < Formula
     on_macos do
       <<~EOS
         For the system Java wrappers to find this JDK, symlink it with
-          sudo ln -sfn #{opt_libexec}/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk.jdk
+          sudo ln -sfn #{opt_libexec}/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-21.jdk
       EOS
     end
   end
@@ -179,15 +183,17 @@ class Openjdk < Formula
 end
 
 __END__
---- a/src/hotspot/os/bsd/memMapPrinter_macosx.cpp
-+++ b/src/hotspot/os/bsd/memMapPrinter_macosx.cpp
-@@ -145,7 +145,9 @@
-       X1(MALLOC_NANO, malloc_nano);
-       X1(MALLOC_MEDIUM, malloc_medium);
--      X1(MALLOC_PROB_GUARD, malloc_prob_guard);
-+#ifdef VM_MEMORY_MALLOC_PROB_GUARD
-+      X1(MALLOC_PROB_GUARD, malloc_prob_guard);
+--- a/src/java.desktop/macosx/native/libawt_lwawt/awt/CGraphicsDevice.m
++++ b/src/java.desktop/macosx/native/libawt_lwawt/awt/CGraphicsDevice.m
+@@ -35,6 +35,12 @@
+ #define DEFAULT_DEVICE_WIDTH 1024
+ #define DEFAULT_DEVICE_HEIGHT 768
+ #define DEFAULT_DEVICE_DPI 72
++// NSBundleExecutableArchitectureARM64 was added in the macOS 11.0 SDK.
++// Define it here so the file compiles against the 10.15 SDK; the
++// @available(macOS 11, *) guard prevents it from being reached at runtime.
++#ifndef NSBundleExecutableArchitectureARM64
++#define NSBundleExecutableArchitectureARM64 0x0100000c
 +#endif
-       X1(MACH_MSG, malloc_msg);
-       X1(IOKIT, IOKit);
-       X1(STACK, stack);
+ 
+ static NSInteger architecture = -1;
