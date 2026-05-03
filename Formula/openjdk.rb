@@ -77,6 +77,9 @@ class Openjdk < Formula
     boot_jdk /= "Contents/Home" if OS.mac?
     java_options = ENV.delete("_JAVA_OPTIONS")
 
+    tap_url = "https://github.com/OldCrow/homebrew-macos1015-fixes"
+    tap_issues_url = "#{tap_url}/issues"
+
     args = %W[
       --disable-warnings-as-errors
       --with-boot-jdk-jvmargs=#{java_options}
@@ -84,11 +87,11 @@ class Openjdk < Formula
       --with-debug-level=release
       --with-jvm-variants=server
       --with-native-debug-symbols=none
-      --with-vendor-bug-url=#{tap.issues_url}
+      --with-vendor-bug-url=#{tap_issues_url}
       --with-vendor-name=#{tap.user}
-      --with-vendor-url=#{tap.issues_url}
+      --with-vendor-url=#{tap_url}
       --with-vendor-version-string=#{tap.user}
-      --with-vendor-vm-bug-url=#{tap.issues_url}
+      --with-vendor-vm-bug-url=#{tap_issues_url}
       --with-version-build=#{revision}
       --without-version-opt
       --without-version-pre
