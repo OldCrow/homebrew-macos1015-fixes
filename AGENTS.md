@@ -93,6 +93,11 @@ Formulae are based on upstream homebrew-core but modified for 10.15 compatibilit
 - **Fix**: Build with Homebrew LLVM (`ENV.llvm_clang`)
 - **Key dependency**: `llvm` (build)
 
+### openjdk.rb
+- **Problem**: `memMapPrinter_macosx.cpp` references `VM_MEMORY_MALLOC_PROB_GUARD` in a switch-case via the `X1()` macro. This constant was added to `<mach/vm_statistics.h>` after macOS 10.15; the 10.15 SDK tops out at `VM_MEMORY_MALLOC_MEDIUM` (12). The result is a hard compile error: `use of undeclared identifier 'VM_MEMORY_MALLOC_PROB_GUARD'`.
+- **Fix**: Source-only patch wrapping the `X1(MALLOC_PROB_GUARD, ...)` call with `#ifdef VM_MEMORY_MALLOC_PROB_GUARD` / `#endif`. On 10.15 the tag is simply unreachable; the existing `default:` branch already formats unknown tag values as hex.
+- **Key dependency**: none (source-only patch)
+
 ## LLVM Build Pattern
 
 The standard fix for Apple Clang 12.x incompatibilities is to build with Homebrew LLVM:
