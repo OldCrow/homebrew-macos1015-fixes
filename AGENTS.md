@@ -78,6 +78,11 @@ Formulae are based on upstream homebrew-core but modified for 10.15 compatibilit
 - **Fix**: Build with Homebrew LLVM (`ENV.llvm_clang`); `grpc_cli` dropped (upstream removes it at 1.80.0)
 - **Key dependency**: `llvm` (build)
 
+### doxygen.rb
+- **Problem**: `dotrunner.cpp` captures the structured binding variable `dirStr` inside a lambda (`auto process = [this,cmd,dirStr]() -> size_t`). Capturing structured bindings in lambdas requires C++20 (P1091R3). Doxygen's `CMakeLists.txt` selects C++17 for AppleClang < 17, so the build fails under Apple Clang 12.x with `-Wpedantic` promoting `-Wc++20-extension` to an error.
+- **Fix**: `inreplace` copies `dirStr` to a plain named variable (`dirStrCopy`) before the lambda and renames the reference inside the lambda body. No compiler change required.
+- **Key dependency**: none (source-only patch)
+
 ### re2.rb
 - **Problem**: No build failure, but re2 links against abseil and should use the same compiler for full ABI consistency across the abseil dependency chain
 - **Fix**: Build with Homebrew LLVM (`ENV.llvm_clang`)
