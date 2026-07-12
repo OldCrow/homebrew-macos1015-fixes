@@ -146,7 +146,7 @@ class Boost < Formula
     llvm = Formula["llvm"]
     system "#{llvm.opt_bin}/clang++", "test.cpp", "-std=c++17", "-stdlib=libc++",
                     "-o", "test", "-L#{lib}", "-lboost_iostreams",
-                    "-L#{Formula["zstd"].opt_lib}", "-lzstd",
+                    "-L#{formula_opt_lib("zstd")}", "-lzstd",
                     "-L#{llvm.opt_lib}/c++", "-Wl,-rpath,#{llvm.opt_lib}/c++"
     system "./test"
   end

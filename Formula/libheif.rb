@@ -24,9 +24,11 @@ class Libheif < Formula
       s.gsub! "std::ranges::all_of(m_reference_types, [](uint32_t t) {",
               "std::all_of(m_reference_types.begin(), m_reference_types.end(), [](uint32_t t) {"
       s.gsub! "std::ranges::find(supported_reference_types, t) != supported_reference_types.end();",
-              "std::find(supported_reference_types.begin(), supported_reference_types.end(), t) != supported_reference_types.end();"
+              "std::find(supported_reference_types.begin(), supported_reference_types.end(), " \
+              "t) != supported_reference_types.end();"
       s.gsub! "std::ranges::find(supported_reference_types, refType) == supported_reference_types.end()) {",
-              "std::find(supported_reference_types.begin(), supported_reference_types.end(), refType) == supported_reference_types.end()) {"
+              "std::find(supported_reference_types.begin(), supported_reference_types.end(), " \
+              "refType) == supported_reference_types.end()) {"
     end
 
     args = %W[

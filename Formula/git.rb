@@ -76,13 +76,13 @@ class Git < Formula
     ENV["PERL_PATH"] = which("perl")
     ENV["USE_LIBPCRE2"] = "1"
     ENV["INSTALL_SYMLINKS"] = "1"
-    ENV["LIBPCREDIR"] = Formula["pcre2"].opt_prefix
+    ENV["LIBPCREDIR"] = formula_opt_prefix("pcre2")
     ENV["V"] = "1" # build verbosely
 
     perl_version = Utils.safe_popen_read("perl", "--version")[/v(\d+\.\d+)(?:\.\d+)?/, 1]
 
     if OS.mac?
-      ENV["ICONVDIR"] = Formula["libiconv"].opt_prefix
+      ENV["ICONVDIR"] = formula_opt_prefix("libiconv")
       ENV["PERLLIB_EXTRA"] = %W[
         #{MacOS.active_developer_dir}
         /Library/Developer/CommandLineTools
@@ -108,7 +108,7 @@ class Git < Formula
     args += if OS.mac?
       %w[NO_OPENSSL=1 APPLE_COMMON_CRYPTO=1]
     else
-      openssl_prefix = Formula["openssl@3"].opt_prefix
+      openssl_prefix = formula_opt_prefix("openssl@3")
 
       %W[NO_APPLE_COMMON_CRYPTO=1 OPENSSLDIR=#{openssl_prefix}]
     end

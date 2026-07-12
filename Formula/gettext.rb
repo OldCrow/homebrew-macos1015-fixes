@@ -30,11 +30,11 @@ class Gettext < Formula
 
     # Ensure json-c is found correctly for the spit tool
     # Configure script auto-detects json-c but generates malformed include path
-    ENV.append "CPPFLAGS", "-I#{Formula["json-c"].opt_include}/json-c"
-    ENV.append "LDFLAGS", "-L#{Formula["json-c"].opt_lib}"
+    ENV.append "CPPFLAGS", "-I#{formula_opt_include("json-c")}/json-c"
+    ENV.append "LDFLAGS", "-L#{formula_opt_lib("json-c")}"
 
     args = [
-      "--with-libunistring-prefix=#{Formula["libunistring"].opt_prefix}",
+      "--with-libunistring-prefix=#{formula_opt_prefix("libunistring")}",
       "--disable-silent-rules",
       "--with-included-glib",
       "--with-included-libcroco",
@@ -55,7 +55,7 @@ class Gettext < Formula
       # your system somehow.
       "--with-included-gettext"
     else
-      "--with-libxml2-prefix=#{Formula["libxml2"].opt_prefix}"
+      "--with-libxml2-prefix=#{formula_opt_prefix("libxml2")}"
     end
 
     system "./configure", *std_configure_args, *args
