@@ -213,7 +213,12 @@ The shell has a `brew-llvm` alias and `~/.homebrew-llvm-wrappers/` that prepend 
 
 ## CI/CD
 
-- `tests.yml`: Runs `brew test-bot` on PRs (ubuntu-22.04, macos-15-intel, macos-26)
+- `tests.yml`: Runs `brew test-bot` on PRs (ubuntu-24.04, macos-15-intel, macos-26), `fail-fast: false`
+  so all matrix legs run to completion independently.
 - `publish.yml`: Merges PRs and publishes bottles when `pr-pull` label is applied
+- Linux runner is pinned to `ubuntu-24.04`, not `ubuntu-22.04`: the latter's glibc 2.35 is older
+  than current Homebrew expects, and `brew doctor` (run by `test-bot --only-setup`) treats that
+  version mismatch as a hard failure. `ubuntu-24.04` ships glibc 2.39, matching what Homebrew
+  auto-installs anyway, avoiding the false failure.
 
 Note: CI tests on modern macOS versions; actual 10.15 testing must be done locally.
