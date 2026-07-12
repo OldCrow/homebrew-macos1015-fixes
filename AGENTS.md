@@ -190,6 +190,29 @@ forums. Do not draft or file the issue unprompted.
   patching the actively-changing macro.
 - **Key dependency**: `llvm` (build)
 
+### libheif.rb
+- **Problem**: `libheif/box.cc` uses `std::ranges::all_of`/`std::ranges::find`, which need the
+  libc++ `<ranges>` header from macOS 11+. Apple Clang 12 on 10.15 lacks it.
+- **Fix**: `inreplace` rewrites the `std::ranges` calls to their C++17 iterator-pair equivalents
+  (`std::all_of`/`std::find`); `<algorithm>` is already included, so no compiler change is needed.
+- **Key dependency**: none (source-only patch)
+
+### osx-cpu-temp.rb
+- **Problem**: The available Catalina bottle's tab has `built_on: null` (a pre-2.5 Homebrew
+  artifact); modern Homebrew crashes in `Utils::Bottles.load_tab` dereferencing `tab.built_on["os"]`
+  without a nil guard.
+- **Fix**: `pour_bottle? { false }` forces a source build, avoiding the broken bottle tab.
+- **Key dependency**: none (source build)
+
+### z3.rb
+- **Problem**: z3 4.16.0 uses `std::format` (needs libc++ `<format>` from macOS 14+) and C++20
+  parenthesized aggregate initialization (P0960); both are absent on Apple Clang 12 / 10.15.
+  `llvm` cannot be a build dep here because `llvm` itself depends on `z3`.
+- **Fix**: Inject a minimal `std::format` polyfill header (positional `{}` only, via
+  `ostringstream`) on the include path, and `inreplace` the paren aggregate init
+  (`key_data(...)`/`key_value(...)`) to C++17 brace init.
+- **Key dependency**: none (source-only patch + polyfill header)
+
 ## LLVM Build Pattern
 
 The standard fix for Apple Clang 12.x incompatibilities is to build with Homebrew LLVM:

@@ -1,8 +1,8 @@
 class ProtobufAT33 < Formula
   desc "Protocol buffers (Google's data interchange format)"
   homepage "https://protobuf.dev/"
-  url "https://github.com/protocolbuffers/protobuf/releases/download/v33.5/protobuf-33.5.tar.gz"
-  sha256 "c6c7c27fadc19d40ab2eaa23ff35debfe01f6494a8345559b9bb285ce4144dd1"
+  url "https://github.com/protocolbuffers/protobuf/releases/download/v33.6/protobuf-33.6.tar.gz"
+  sha256 "16498d7dc7967e9b100632138babd4b86b61592beeccdd556f67539d9c231355"
   license "BSD-3-Clause"
 
   livecheck do
@@ -15,6 +15,7 @@ class ProtobufAT33 < Formula
   # Support for protoc 33.x (protobuf C++ 6.33.x) will end on 2027-03-31
   # Ref: https://protobuf.dev/support/version-support/#cpp
   deprecate! date: "2027-03-31", because: :versioned_formula
+  disable! date: "2028-03-31", because: :versioned_formula
 
   depends_on "cmake" => :build
   depends_on "abseil"
