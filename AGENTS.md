@@ -1,37 +1,57 @@
 # AGENTS.md
 
-This file provides guidance to WARP (warp.dev) when working with code in this repository.
+This file provides project-scoped guidance to AI agents and contributors working in this repository.
 
-## Purpose
+## Project Overview
 
-Custom Homebrew tap containing patched formulae for macOS 10.15 (Catalina) compatibility. Homebrew no longer officially supports Catalina (Tier 3), so formulae here include fixes for build failures on that platform.
+`wolfman/macos1015-fixes` is a Homebrew tap of formula overrides targeting macOS 10.15 (Catalina),
+Apple Clang 12 (clang-1200), on an Intel Homebrew prefix (`/usr/local`). Homebrew no longer
+officially supports Catalina (Tier 3), so formulae here patch build failures on that platform.
 
-## Formula Development
+All formulas here shadow homebrew-core formulas that fail to build or run on this platform.
+They are temporary: remove each one once homebrew-core ships a Catalina bottle or upstream
+fixes the issue. Some overrides fix genuine upstream version-compatibility bugs (not
+macOS-specific) that happen to block a build on this platform; note this explicitly in the
+formula's header comment when it applies (see Formula Conventions below).
 
-### Checking for Upstream Updates
+## Session Start
+
+Before patching or reinstalling a formula, confirm the local tap is in sync with remote:
 
 ```bash
-./scripts/check-upstream
+cd $(brew --repo wolfman/macos1015-fixes)
+git fetch && git status
 ```
 
-Compares tap formulae versions against homebrew-core. Returns exit code 1 if any are outdated.
+If local and remote have diverged, reconcile before making further changes.
 
-### Testing Formulae Locally
+## Build Commands
 
 ```bash
-# Audit formula syntax
-brew audit --strict Formula/<name>.rb
+# Compare tap formulae versions against homebrew-core; exit 1 if any are outdated
+./scripts/check-upstream
 
-# Test installation from source
-brew install --build-from-source wolfman/macos1015-fixes/<name>
+# Audit a formula for style/policy issues before committing
+brew audit --strict wolfman/macos1015-fixes/<formula>
+
+# Verify Ruby syntax quickly without invoking a full build
+ruby -c Formula/<formula>.rb
+
+# Test a patched formula directly (bypasses the confirmation prompts of `brew install`)
+brew install --build-from-source wolfman/macos1015-fixes/<formula>
 
 # Run formula tests
-brew test wolfman/macos1015-fixes/<name>
+brew test wolfman/macos1015-fixes/<formula>
 
 # Full test-bot validation (as CI runs)
 brew test-bot --only-tap-syntax
 brew test-bot --only-formulae
 ```
+
+Dependents that reference an overridden formula by plain name (e.g. `pmd` depending on
+`openjdk`) do not automatically pick up the tap version. Install the tap-qualified formula
+explicitly first so a keg with that name already exists; Homebrew's dependency resolver then
+reuses the installed keg instead of rebuilding from homebrew-core.
 
 ### Creating/Updating Formulae
 
@@ -40,6 +60,61 @@ Formulae are based on upstream homebrew-core but modified for 10.15 compatibilit
 1. Compare against current upstream: `/usr/local/Homebrew/Library/Taps/homebrew/homebrew-core/Formula/`
 2. Preserve the macOS 10.15-specific modifications
 3. Update version, sha256, and any new upstream changes
+
+## Upstream Issue Reporting
+
+Most formulas in this tap exist purely because of macOS 10.15 / Apple Clang 12 incompatibilities.
+Some do not: the root cause is a genuine upstream bug or version-compatibility break that would
+fail on any OS building from source (e.g. a dependency bump that breaks a consumer's API
+assumptions, not a macOS-specific compiler quirk). When diagnosing a build failure turns out to
+be one of these broader cases, tell the User before committing the formula and ask whether they
+want to draft an issue for the relevant project's upstream tracker or Homebrew's discussion
+forums. Do not draft or file the issue unprompted.
+
+## Formula Conventions
+
+- Begin each file with a comment block: problem description, root cause, fix applied,
+  and a "Remove this formula once..." line (see `doxygen.rb`, `fastfetch.rb`). Retrofit this
+  header onto older formulas opportunistically when they are next touched.
+- Use `patch :DATA` + `__END__` for inline patches (preferred over external `.patch` files;
+  see `doxygen.rb`).
+- Skip `make check`/`ctest` only when test failures are demonstrably platform-specific (SIP
+  sandbox, dylib mismatch, ABI mangling mismatch between compilers, etc.). Document the reason
+  in the install block comment (see `openjdk@21.rb`, `protobuf@33.rb`).
+- When the fix is "build with a newer compiler" rather than a source patch, prefer the LLVM
+  Build Pattern below over hand-patching actively-maintained upstream macros/headers, since
+  patches to fast-moving code create ongoing merge conflicts.
+
+## Known Apple Clang 12 Failure Patterns
+
+- **Missing `__VA_OPT__` support in C mode**: Apple Clang 12 does not implement the C23
+  `__VA_OPT__` preprocessor feature under any `-std=` flag (confirmed absent under `gnu17`,
+  `c2x`, and `gnu2x` alike), so macros using it in plain C translation units fail with
+  "error: expected expression" at the macro invocation site.
+  Fix: build with Homebrew LLVM (`ENV.llvm_clang`).
+- **C++20 structured binding capture in a lambda**: capturing a structured binding by value in
+  a lambda requires C++20 (P1091R3); some build systems select C++17 for `AppleClang < 17`,
+  so `-Wpedantic` promotes the resulting `-Wc++20-extension` warning to a hard error.
+  Fix: copy the structured binding to a plain named variable before the lambda.
+- **`[[gnu::warn_unused]]` class-attribute misparse**: Apple Clang 12 misparses this attribute
+  combined with `__attribute__((visibility(...)))` on a class declaration, treating the class
+  as anonymous and cascading into unrelated build failures.
+  Fix: build with Homebrew LLVM (`ENV.llvm_clang`).
+- **NTTP name-mangling mismatch**: Apple Clang 12 and LLVM 22 encode `enable_if` non-type
+  template parameters differently (`Li0E` vs. `Tn`-encoded form). Linking an LLVM-compiled
+  library (e.g. abseil) against an Apple-Clang-compiled consumer produces missing symbols.
+  Fix: build the whole dependency chain with the same compiler (Homebrew LLVM).
+- **Missing macOS 11+ SDK symbols behind a runtime-only guard**: code guarded by
+  `@available(macOS 11, *)` is still compiled unconditionally, so SDK-11-only symbols
+  (e.g. `NSBundleExecutableArchitectureARM64`) referenced inside the guarded block fail to
+  compile against the 10.15 SDK even though they're never reached at runtime.
+  Fix: add a compile-time `#ifndef`/`#define` guard before first use.
+- **Missing libc++ functions**: Apple's libc++ on 10.15 lacks functions newer code assumes are
+  present (e.g. `std::aligned_alloc`, required by Boost.Asio).
+  Fix: build with Homebrew LLVM toolchain and link against LLVM's libc++.
+- **Outdated system libraries silently dropped**: upstream formulas sometimes drop an explicit
+  dependency (e.g. `libiconv`) assuming the OS-provided version is new enough; on 10.15 it isn't.
+  Fix: re-add the dependency explicitly and point the relevant env var (e.g. `ICONVDIR`) at it.
 
 ## Current Fixes
 
@@ -105,6 +180,15 @@ Formulae are based on upstream homebrew-core but modified for 10.15 compatibilit
 - **Problem**: The upstream `pmd.rb` formula depends on `openjdk` (currently JDK 25), which cannot be built on macOS 10.15. PMD 7.x requires only Java 8+.
 - **Fix**: Depend on `wolfman/macos1015-fixes/openjdk@21` instead. No other changes from upstream.
 - **Key dependency**: `wolfman/macos1015-fixes/openjdk@21`
+
+### fastfetch.rb
+- **Problem**: `src/common/library.h`'s `FF_LIBRARY_LOAD` macro uses `__VA_OPT__`, a C23
+  preprocessor feature. Apple Clang 12 doesn't implement it in C mode under any `-std=` flag,
+  so `src/common/impl/lua.c` and `src/common/impl/networking_common.c` fail with
+  "error: expected expression" at the macro invocation site.
+- **Fix**: Build with Homebrew LLVM (`ENV.llvm_clang`), which supports `__VA_OPT__`, instead of
+  patching the actively-changing macro.
+- **Key dependency**: `llvm` (build)
 
 ## LLVM Build Pattern
 
