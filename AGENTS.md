@@ -25,6 +25,29 @@ git fetch && git status
 
 If local and remote have diverged, reconcile before making further changes.
 
+## Git Remote Configuration
+
+This tap's `origin` deliberately splits fetch and push URLs:
+
+```bash
+git -C "$(brew --repo wolfman/macos1015-fixes)" remote -v
+# origin  https://github.com/OldCrow/homebrew-macos1015-fixes.git (fetch)
+# origin  git@github.com:OldCrow/homebrew-macos1015-fixes.git (push)
+```
+
+Fetch is HTTPS so `brew update` (which runs `git fetch` in every tap) reads this
+public repo anonymously. Push stays on SSH so commits go out over the
+yubikey-backed key. This is intentional: an SSH fetch URL makes every
+`brew update` trigger a `pinentry-mac` yubikey prompt via gpg-agent's SSH
+support. Do not "normalize" the fetch URL back to SSH — the split is the fix,
+not an oversight. Restore it with:
+
+```bash
+tap=$(brew --repo wolfman/macos1015-fixes)
+git -C "$tap" remote set-url origin https://github.com/OldCrow/homebrew-macos1015-fixes.git
+git -C "$tap" remote set-url --push origin git@github.com:OldCrow/homebrew-macos1015-fixes.git
+```
+
 ## Build Commands
 
 ```bash
@@ -115,6 +138,14 @@ forums. Do not draft or file the issue unprompted.
 - **Outdated system libraries silently dropped**: upstream formulas sometimes drop an explicit
   dependency (e.g. `libiconv`) assuming the OS-provided version is new enough; on 10.15 it isn't.
   Fix: re-add the dependency explicitly and point the relevant env var (e.g. `ICONVDIR`) at it.
+- **`-std=c++20` flag spelling unrecognized**: Apple Clang 12 accepts only the pre-release
+  spelling `-std=c++2a`; `-std=c++20` is rejected outright (`invalid value 'c++20'`). Build
+  systems that probe for `-std=c++20` and quietly fall back to C++17 then compile the code in
+  a standard mode upstream never tests, exposing latent C++17 non-conformance.
+  Fix: make the probe ask for `-std=c++2a`, which newer compilers still accept as an alias.
+  Note this class of failure is **not** fixed by `ENV.llvm_clang`: the code is genuinely
+  ill-formed in C++17, so Homebrew LLVM rejects it too at the same `-std=`. Confirm which it is
+  by compiling a reduced case with both compilers at the failing `-std=` before choosing a fix.
 
 ## Current Fixes
 
@@ -212,6 +243,23 @@ forums. Do not draft or file the issue unprompted.
   `ostringstream`) on the include path, and `inreplace` the paren aggregate init
   (`key_data(...)`/`key_value(...)`) to C++17 brace init.
 - **Key dependency**: none (source-only patch + polyfill header)
+
+### tesseract.rb
+- **Problem**: Six hard errors in `src/ccstruct/points.h` — `constexpr function never produces a
+  constant expression [-Winvalid-constexpr]` for the free `FCOORD` operators (`!`, unary `-`,
+  `+`, binary `-`, and both `*`). They default-construct an `FCOORD`, whose `= default`
+  constructor leaves both `float` members uninitialized, then assign to them. That body is a
+  valid constexpr function only from C++20 (P1331R2, trivial default initialization in constexpr
+  contexts); under C++17 Clang rejects it, and `-Winvalid-constexpr` is an error by default.
+  Not an Apple Clang bug — Homebrew LLVM 22 rejects the same code at `-std=c++17`, so
+  `ENV.llvm_clang` does not help. Other platforms escape it because `configure.ac` probes
+  `-std=c++17` then `-std=c++20` and lands on C++20; Apple Clang 12 rejects the `c++20` spelling
+  (it accepts only `-std=c++2a`), so configure silently falls back to C++17.
+- **Fix**: `inreplace` `configure.ac` before `autogen.sh` so the second probe asks for
+  `-std=c++2a`, putting the build in C++20 mode like every other platform.
+- **Key dependency**: none (build-configuration patch)
+- **Note**: This is a latent upstream bug in tesseract's C++17 fallback path, not a
+  macOS-specific quirk; it would fail on any platform whose compiler lacks the `c++20` spelling.
 
 ## LLVM Build Pattern
 
