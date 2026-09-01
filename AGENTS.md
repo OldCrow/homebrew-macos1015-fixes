@@ -152,7 +152,24 @@ forums. Do not draft or file the issue unprompted.
 ### boost.rb
 - **Problem**: Apple's libc++ on 10.15 lacks `std::aligned_alloc` required by Boost.Asio
 - **Fix**: Uses Homebrew LLVM toolchain instead of system clang; links against LLVM's libc++
-- **Key dependency**: `llvm`
+- **Also fixed**: Setting `CC`/`CXX` to llvm's absolute binary path bypasses Homebrew's superenv
+  shim entirely, including its automatic -isystem injection for `/usr/local/include` (clang
+  does not search it by default on macOS) and its per-dependency -I/-L injection for `zstd`/`xz`.
+  Boost.Build's own internal feature-detection Jamfile checks (which decide whether
+  Boost.IOStreams gets zstd/lzma support) run using only the bare `user-config.jam` toolset
+  declaration -- they do not see the `cxxflags=`/`linkflags=` properties passed to the final
+  `b2 install` command. Without any `<compileflags>`/`<linkflags>` on the toolset declaration,
+  those checks silently failed to find `<zstd.h>`/`<lzma.h>` and `libzstd`/`liblzma`, so `b2`
+  quietly built Boost.IOStreams without zstd/lzma support with no build error at all --
+  surfacing only later as an undefined-symbol *link* error in any code calling
+  `zstd_compressor()`/`zstd_decompressor()` (or the lzma equivalents). This was a pre-existing
+  gap in this tap's own `boost.rb`, unrelated to the llvm 22->23 upgrade or Apple Clang --
+  it would have failed identically on any platform building this exact formula from source.
+  Fixed by embedding zstd's and xz's include/lib paths directly into the `using darwin/gcc : :
+  ... : <compileflags>... <linkflags>... ;` toolset declaration, so every compile Boost.Build
+  performs (including its own internal checks) can find them. Confirmed via `nm` on the built
+  `libboost_iostreams.dylib` (zstd symbols present) and `brew test`.
+- **Key dependency**: `llvm`, `zstd`, `xz`
 
 ### gettext.rb
 - **Problem**: Configure auto-detects json-c but generates malformed include path
@@ -260,6 +277,20 @@ forums. Do not draft or file the issue unprompted.
 - **Key dependency**: none (build-configuration patch)
 - **Note**: This is a latent upstream bug in tesseract's C++17 fallback path, not a
   macOS-specific quirk; it would fail on any platform whose compiler lacks the `c++20` spelling.
+
+### llvm.rb
+- **Problem**: Upgrading llvm 22.1.8 -> 23.1.0 fails under Apple Clang 12.x: `llvm/include/llvm/ADT/bit.h:92:3: error: non-void function 'bit_cast' should return a value [-Wreturn-type]`, first breaking `lib/Support/{ABIBreak,AMDGPUMetadata,APFixedPoint,APFloat}.cpp.o`. Root cause is an Apple Clang 12 bug that only manifests when *consuming* (not building) a precompiled header containing `llvm::bit_cast<>()`, an `inline` function template with SFINAE constraints expressed as defaulted `std::enable_if_t<>` type parameters. Confirmed via isolated repro: emitting the PCH succeeds, but a second translation unit consuming it and instantiating a caller (e.g. `APInt::bitsToDouble()`) reproduces the exact failure. This is a host-compiler bug, not a source defect or SDK-availability issue.
+- **Fix**: Build with `llvm@22` as the host compiler (`ENV.llvm_clang` + `depends_on "llvm@22" => :build`, on_macos only); llvm@22's own clang does not reproduce the bug against the same isolated repro. No source patch needed.
+- **Also fixed**: upstream's `test do` block unconditionally runs a Z3-backed static analyzer assertion (`-analyzer-constraints=unsupported-z3`) even when `install` disabled Z3 (`LLVM_ENABLE_Z3_SOLVER=OFF`, which happens on any macOS older than Sonoma, since Z3 needs `std::format` from Xcode 15.3+). This is an upstream test-suite oversight, not Catalina-specific -- it would fail `brew test` for any pre-Sonoma `--build-from-source` install. Guarded with `if deps.map(&:name).include?("z3")`, mirroring the same check `install` uses to set `enable_z3`.
+- **Key dependency**: `llvm@22` (build, macOS only)
+- **Note**: `bit_cast` is header-only `inline` and never exported from `libLLVM.dylib`, so this does not introduce cross-compiler ABI exposure for LLVM's own build (which is fully self-consistent under a single host compiler). The one real consumer that links directly against LLVM/Clang's C++ API, `include-what-you-use`, is handled separately below.
+
+### include-what-you-use.rb
+- **Problem**: IWYU links directly against Clang's internal (non-stable) Tooling/AST C++ API and has a strict 1:1 version mapping to a Clang major (see upstream README's "Clang compatibility" table). IWYU 0.26 (the current latest release) targets Clang 22 only; there is no `clang_23` branch or tagged release upstream, only `master` (tracks Clang mainline, not a fixed 23.1.0-compatible point). Depending on plain `"llvm"` here would silently follow this tap's llvm.rb bump to 23 and likely fail to build, or build against a mismatched internal API and misbehave at runtime.
+- **Fix**: Depend on `"llvm@22"` explicitly instead of plain `"llvm"`, decoupling IWYU from whatever `"llvm"` resolves to. No version bump: 0.26 is already the latest upstream release.
+- **Also fixed**: upstream's `test do` block invokes `include-what-you-use` directly on a C++ file with no `-isystem` flag, relying on default-sysroot header-search auto-detection. IWYU's own binary is a bare ClangTool (not the full `clang`/`clang++` driver), so it does not perform the driver's usual automatic libc++-relative-to-compiler detection; on this machine's CLT/SDK setup this fails with `fatal error: 'iostream' file not found`. Confirmed independent of the llvm@22 pin (same failure mode regardless of LLVM major). Fixed by passing `-isystem #{llvm.opt_include}/c++/v1` explicitly in the test.
+- **Key dependency**: `llvm@22`
+- **Note**: This is **not** a macOS-specific issue -- it would affect any OS updating to llvm 23 before IWYU ships clang_23 support upstream. Per this document's Upstream Issue Reporting policy, flag this to the user and ask before filing an issue/PR against homebrew-core or IWYU upstream.
 
 ## LLVM Build Pattern
 

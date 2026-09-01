@@ -42,12 +42,34 @@ class Boost < Formula
     ENV["LDFLAGS"] = "-L#{llvm.opt_lib}/c++ -Wl,-rpath,#{llvm.opt_lib}/c++"
     ENV["CPPFLAGS"] = "-I#{llvm.opt_include}"
 
-    # Force boost to compile with the desired compiler
+    # Force boost to compile with the desired compiler.
+    #
+    # Boost.Build's own internal feature-detection Jamfile checks (which
+    # decide whether Boost.IOStreams gets zstd/lzma support) run compiler
+    # invocations using ONLY the bare toolset declaration -- they do NOT
+    # pick up the `cxxflags=`/`linkflags=` properties passed to the final
+    # `b2 install` command further down, and (since CC/CXX point directly
+    # at llvm's binary rather than through Homebrew's superenv shim) they
+    # don't get the shim's automatic -isystem injection for
+    # /usr/local/include (clang does not search it by default on macOS) or
+    # its per-dependency -I/-L injection for zstd/xz either. Without any
+    # <compileflags>/<linkflags> on the toolset declaration, those checks
+    # silently fail to find <zstd.h>/<lzma.h> and libzstd/liblzma, so b2
+    # quietly builds Boost.IOStreams without zstd/lzma support -- surfacing
+    # later as an undefined-symbol *link* error in any code that calls
+    # zstd_compressor()/zstd_decompressor() (or the lzma equivalents), not
+    # as a build failure. Embed zstd's and xz's include/lib paths directly
+    # in the toolset declaration so every compile Boost.Build performs,
+    # including its own internal checks, can find them.
+    zstd = Formula["zstd"]
+    xz = Formula["xz"]
+    compileflags = "-I#{zstd.opt_include} -I#{xz.opt_include}"
+    linkflags = "-L#{zstd.opt_lib} -L#{xz.opt_lib}"
     open("user-config.jam", "a") do |file|
       if OS.mac?
-        file.write "using darwin : : #{ENV.cxx} ;\n"
+        file.write "using darwin : : #{ENV.cxx} : <compileflags>\"#{compileflags}\" <linkflags>\"#{linkflags}\" ;\n"
       else
-        file.write "using gcc : : #{ENV.cxx} ;\n"
+        file.write "using gcc : : #{ENV.cxx} : <compileflags>\"#{compileflags}\" <linkflags>\"#{linkflags}\" ;\n"
       end
     end
 
