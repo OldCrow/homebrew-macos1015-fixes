@@ -315,12 +315,30 @@ The shell has a `brew-llvm` alias and `~/.homebrew-llvm-wrappers/` that prepend 
 
 ## CI/CD
 
-- `tests.yml`: Runs `brew test-bot` on PRs (ubuntu-24.04, macos-15-intel, macos-26), `fail-fast: false`
-  so all matrix legs run to completion independently.
-- `publish.yml`: Merges PRs and publishes bottles when `pr-pull` label is applied
+- `tests.yml`: runs `brew test-bot --only-tap-syntax` on a single `ubuntu-24.04` runner.
+- `publish.yml`: merges PRs and publishes bottles when the `pr-pull` label is applied. Dormant --
+  nothing produces bottles now that `--only-formulae` is gone; keep it only if that changes.
 - Linux runner is pinned to `ubuntu-24.04`, not `ubuntu-22.04`: the latter's glibc 2.35 is older
   than current Homebrew expects, and `brew doctor` (run by `test-bot --only-setup`) treats that
   version mismatch as a hard failure. `ubuntu-24.04` ships glibc 2.39, matching what Homebrew
-  auto-installs anyway, avoiding the false failure.
+  auto-installs anyway, avoiding the false failure. `ubuntu-22.04` also begins deprecation on
+  2026-09-17.
 
-Note: CI tests on modern macOS versions; actual 10.15 testing must be done locally.
+### Why one Linux runner and no macOS matrix (audited 2026-09-06)
+
+CI cannot build what this tap fixes: GitHub removed the macOS 13 runners on 2025-12-08 and has
+never offered 10.15, so no hosted runner runs Catalina or Apple Clang 12. Everything CI *can*
+check -- `brew style`, `brew readall --os=all --arch=all`, `brew audit` -- is platform-independent
+Ruby linting that returns the same result on every runner, so a macOS matrix re-derived an
+identical answer at 10x the per-minute cost.
+
+It also imported unrelated breakage. On 2026-09-02 homebrew-core dropped gmp's Intel macOS
+bottles (`arm64_*` and Linux only). `brew style` installs `shellcheck`, which needs `gmp`, so on
+`macos-15-intel` it began source-building gmp and hung ~29 minutes on unreachable `gmplib.org`
+and `ftpmirror.gnu.org` before failing. Every push after that date failed on that leg alone.
+
+`--only-formulae` and the bottle-artifact upload were dropped with the matrix: both were gated on
+`pull_request`, this repo pushes straight to main, and a build on Sequoia/Tahoe would exercise the
+wrong compiler regardless.
+
+Real build validation is local, on the target machine -- see Build Commands above.
